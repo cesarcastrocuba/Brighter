@@ -56,18 +56,6 @@ namespace Paramore.Brighter.MessagingGateway.RMQ
         {
             Dispose(true);
             GC.SuppressFinalize(this);
-        }private void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                _messages?.Dispose();
-            }
-        }
-
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
         }
     }
 }

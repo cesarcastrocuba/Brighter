@@ -52,7 +52,7 @@ namespace Paramore.Brighter.MessagingGateway.RMQ
         private readonly ushort _preFetchSize;
         private const bool AutoAck = false;
         private readonly RmqMessageCreator _messageCreator;
-        private QueueingBasicConsumer _consumer;
+        private BrighterBasicConsumer _consumer;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="RMQMessageGateway" /> class.
@@ -193,25 +193,28 @@ namespace Paramore.Brighter.MessagingGateway.RMQ
         {
             _logger.Value.DebugFormat("RmqMessageConsumer: Preparing to retrieve next message from queue {0} with routing key {1} via exchange {2} on connection {3}", _queueName, _routingKey, Connection.Exchange.Name, Connection.AmpqUri.GetSanitizedUri());
 
-            var message = new Message();
             try
             {
                 EnsureConsumer();
-                BasicDeliverEventArgs fromQueue;
-                if (_consumer.Queue.Dequeue(timeoutInMilliseconds, out fromQueue))
+
+                var message = _consumer.Dequeue(timeoutInMilliseconds);
+
+                if (message.Header.MessageType == MessageType.MT_NONE)
                 {
-                    message = _messageCreator.CreateMessage(fromQueue);
+                    _logger.Value.DebugFormat(
+                        "RmqMessageConsumer: Timed out after {4} without receiving message from queue {0} with routing key {1} via exchange {2} on connection {3}",
+                        _queueName, _routingKey, Connection.Exchange.Name, Connection.AmpqUri.GetSanitizedUri(), timeoutInMilliseconds);
+                }
+                else
+                {
                     _logger.Value.InfoFormat(
                         "RmqMessageConsumer: Received message from queue {0} with routing key {1} via exchange {2} on connection {3}, message: {5}{4}",
                         _queueName, _routingKey, Connection.Exchange.Name, Connection.AmpqUri.GetSanitizedUri(), JsonConvert.SerializeObject(message),
                         Environment.NewLine);
+
                 }
-                else
-                {
-                    _logger.Value.DebugFormat(
-                        "RmqMessageConsumer: Time out without receiving message from queue {0} with routing key {1} via exchange {2} on connection {3}",
-                        _queueName, _routingKey, Connection.Exchange.Name, Connection.AmpqUri.GetSanitizedUri());
-                }
+
+                return message;
             }
             catch (EndOfStreamException endOfStreamException)
             {
@@ -226,7 +229,8 @@ namespace Paramore.Brighter.MessagingGateway.RMQ
             }
             catch (BrokerUnreachableException bue)
             {
-                _logger.Value.ErrorException("RmqMessageConsumer: There was an error listening to queue {0} via exchange {1} via exchange {2} on connection {3}",
+                _logger.Value.ErrorException(
+                    "RmqMessageConsumer: There was an error listening to queue {0} via exchange {1} via exchange {2} on connection {3}",
                     bue,
                     _queueName,
                     _routingKey,
@@ -236,7 +240,8 @@ namespace Paramore.Brighter.MessagingGateway.RMQ
             }
             catch (AlreadyClosedException ace)
             {
-                _logger.Value.ErrorException("RmqMessageConsumer: There was an error listening to queue {0} via exchange {1} via exchange {2} on connection {3}",
+                _logger.Value.ErrorException(
+                    "RmqMessageConsumer: There was an error listening to queue {0} via exchange {1} via exchange {2} on connection {3}",
                     ace,
                     _queueName,
                     _routingKey,
@@ -246,7 +251,8 @@ namespace Paramore.Brighter.MessagingGateway.RMQ
             }
             catch (OperationInterruptedException oie)
             {
-                _logger.Value.ErrorException("RmqMessageConsumer: There was an error listening to queue {0} via exchange {1} via exchange {2} on connection {3}",
+                _logger.Value.ErrorException(
+                    "RmqMessageConsumer: There was an error listening to queue {0} via exchange {1} via exchange {2} on connection {3}",
                     oie,
                     _queueName,
                     _routingKey,
@@ -256,7 +262,8 @@ namespace Paramore.Brighter.MessagingGateway.RMQ
             }
             catch (NotSupportedException nse)
             {
-                _logger.Value.ErrorException("RmqMessageConsumer: There was an error listening to queue {0} via exchange {1} via exchange {2} on connection {3}",
+                _logger.Value.ErrorException(
+                    "RmqMessageConsumer: There was an error listening to queue {0} via exchange {1} via exchange {2} on connection {3}",
                     nse,
                     _queueName,
                     _routingKey,
@@ -266,7 +273,8 @@ namespace Paramore.Brighter.MessagingGateway.RMQ
             }
             catch (BrokenCircuitException bce)
             {
-                _logger.Value.WarnFormat("CIRCUIT BROKEN: RmqMessageConsumer: There was an error listening to queue {0} via exchange {1} via exchange {2} on connection {3}",
+                _logger.Value.WarnFormat(
+                    "CIRCUIT BROKEN: RmqMessageConsumer: There was an error listening to queue {0} via exchange {1} via exchange {2} on connection {3}",
                     _queueName,
                     _routingKey,
                     Connection.Exchange.Name,
@@ -275,16 +283,18 @@ namespace Paramore.Brighter.MessagingGateway.RMQ
             }
             catch (Exception exception)
             {
-                _logger.Value.ErrorException("RmqMessageConsumer: There was an error listening to queue {0} via exchange {1} via exchange {2} on connection {3}", exception, _queueName, _routingKey, Connection.Exchange.Name, Connection.AmpqUri.GetSanitizedUri());
+                _logger.Value.ErrorException(
+                    "RmqMessageConsumer: There was an error listening to queue {0} via exchange {1} via exchange {2} on connection {3}",
+                    exception, _queueName, _routingKey, Connection.Exchange.Name, Connection.AmpqUri.GetSanitizedUri());
                 throw;
             }
 
-            return message;
+            return new Message();
         }
 
         protected virtual void CreateConsumer()
         {
-            _consumer = new QueueingBasicConsumer(Channel);
+            _consumer = new BrighterBasicConsumer(Channel);
 
             Channel.BasicQos(0, _preFetchSize, false);
 
